@@ -7,7 +7,7 @@
   <strong>I architect and build end-to-end AI systems.</strong>
 </p>
 <p align="left">
-<strong>My expertise is in owning the complete pipeline</strong>: from training models and deploying LLMs to building the production-ready, scalable backends that serve them.
+<strong>My expertise is in owning the complete pipeline</strong>: from training models and deploying to building the production-ready, scalable backends that serve them.
 </p>
 
 ### 🛠️ My Tech Stack
