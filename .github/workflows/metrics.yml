@@ -39,22 +39,28 @@ jobs:
           import matplotlib.dates as mdates
           import os
 
+          # --- THEME SETUP (Tokyo Night) ---
+          BG_COLOR = '#1a1b26' # Match the metrics theme background
+          TEXT_COLOR = '#a9b1d6'
+          GRID_COLOR = '#414868'
+          
           # Setup Plot
           plt.style.use('dark_background')
-          fig = plt.figure(figsize=(10, 8)) # Taller to fit 2 charts
+          fig = plt.figure(figsize=(10, 8))
+          fig.patch.set_facecolor(BG_COLOR) # Force dark background (fixes invisible text)
 
           def plot_data(ax, csv_path, title, color_total, color_unique):
+              ax.set_facecolor(BG_COLOR)
+              
               if not os.path.exists(csv_path):
-                  ax.text(0.5, 0.5, f'{title}: No data yet', ha='center', va='center', color='white')
+                  ax.text(0.5, 0.5, f'{title}: No data yet', ha='center', va='center', color=TEXT_COLOR)
                   ax.axis('off')
                   return
 
               try:
                   df = pd.read_csv(csv_path)
-                  # Normalize columns
                   df.columns = [c.lower().strip() for c in df.columns]
                   
-                  # Detect columns
                   date_col = df.columns[0]
                   count_col = next((c for c in df.columns if 'count' in c or 'view' in c), None)
                   unique_col = next((c for c in df.columns if 'unique' in c), None)
@@ -62,44 +68,45 @@ jobs:
                   if not count_col or not unique_col:
                       return
 
-                  # Convert date
                   df[date_col] = pd.to_datetime(df[date_col])
                   df = df.sort_values(date_col)
 
-                  # Plot Lines
-                  ax.plot(df[date_col], df[count_col], marker='o', linestyle='-', color=color_total, linewidth=2, label='Total')
-                  ax.plot(df[date_col], df[unique_col], marker='o', linestyle='--', color=color_unique, linewidth=2, label='Unique')
+                  # Plot Lines with clear labels
+                  ax.plot(df[date_col], df[count_col], marker='o', linestyle='-', color=color_total, linewidth=2, label='Total Count')
+                  ax.plot(df[date_col], df[unique_col], marker='o', linestyle='--', color=color_unique, linewidth=2, label='Unique Visitors')
                   
                   # Styling
-                  ax.set_title(title, color='white', fontweight='bold', loc='left', pad=10)
-                  ax.grid(True, linestyle=':', alpha=0.2, color='white')
+                  ax.set_title(title, color=TEXT_COLOR, fontweight='bold', loc='left', pad=10)
+                  ax.grid(True, linestyle=':', alpha=0.4, color=GRID_COLOR)
                   
                   # Remove borders
                   ax.spines['top'].set_visible(False)
                   ax.spines['right'].set_visible(False)
-                  ax.spines['bottom'].set_color('#30363d')
-                  ax.spines['left'].set_color('#30363d')
-                  ax.tick_params(colors='#8b949e')
+                  ax.spines['bottom'].set_color(GRID_COLOR)
+                  ax.spines['left'].set_color(GRID_COLOR)
+                  ax.tick_params(colors=TEXT_COLOR)
                   
-                  # Format Date (e.g., Nov 29)
+                  # Date formatting
                   ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
                   
-                  # Legend placed OUTSIDE to the right
-                  ax.legend(frameon=False, labelcolor='white', loc='center left', bbox_to_anchor=(1, 0.5))
+                  # LEGEND (Explicitly colored text)
+                  legend = ax.legend(frameon=False, loc='upper left', bbox_to_anchor=(1, 1))
+                  plt.setp(legend.get_texts(), color=TEXT_COLOR)
                   
               except Exception as e:
                   print(f"Error plotting {title}: {e}")
 
           # 1. Plot Views (Top)
           ax1 = plt.subplot(2, 1, 1)
-          plot_data(ax1, "traffic/views.csv", "Repository Views", "#79ff97", "#2f80ed") # Green & Blue
+          plot_data(ax1, "traffic/views.csv", "Repository Views", "#7aa2f7", "#bb9af7") 
 
           # 2. Plot Clones (Bottom)
           ax2 = plt.subplot(2, 1, 2)
-          plot_data(ax2, "traffic/clones.csv", "Repository Clones", "#ff7b72", "#d2a8ff") # Red & Purple
+          plot_data(ax2, "traffic/clones.csv", "Repository Clones", "#f7768e", "#e0af68") 
 
           plt.tight_layout()
-          plt.savefig("traffic-graph.svg", transparent=True, bbox_inches="tight")
+          # Save with background color so white text is visible on any screen
+          plt.savefig("traffic-graph.svg", facecolor=fig.get_facecolor(), edgecolor='none')
           print("Graph generated successfully.")
           EOF
           
@@ -134,11 +141,13 @@ jobs:
           plugin_traffic: yes
           
           # Habits & Charts
+          # FIXED: Reduced to 14 days to prevent "Unexpected Error" (division by zero on sparse data)
           plugin_habits: yes
-          plugin_habits_from: 1000      # Use max events (1000)
-          plugin_habits_days: 365       # Keep history for 1 year (or as far back as GitHub API allows)
+          plugin_habits_from: 200
+          plugin_habits_days: 14        
           plugin_habits_facts: yes
           plugin_habits_charts: yes
+          plugin_habits_trim: yes
           
           # Followup (Radar Chart)
           plugin_followup: yes
