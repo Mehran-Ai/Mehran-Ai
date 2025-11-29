@@ -13,11 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Retrieve full history for commits
+          fetch-depth: 0 # Retrieve full history
 
       # A. Collect Traffic Data to CSV
       - name: Repository Traffic Collector
-        uses: sangonzal/repository-traffic-action@v0.1.6
+        # CHANGED: Switched to @master to fix the version error
+        uses: sangonzal/repository-traffic-action@master
         env:
           TRAFFIC_ACTION_TOKEN: ${{ secrets.METRICS_PROFILE }}
 
@@ -38,44 +39,70 @@ jobs:
           import matplotlib.pyplot as plt
           import os
 
-          # Check if file exists
-          if not os.path.exists("traffic/views.csv"):
-              print("No traffic data found yet.")
+          # Define the path to the traffic views file
+          # The action saves it in the 'traffic' folder
+          csv_path = "traffic/views.csv"
+
+          # Check if file exists (it might not on the very first run)
+          if not os.path.exists(csv_path):
+              print(f"File {csv_path} not found. Skipping graph generation for now.")
+              # Create a placeholder empty image to prevent errors
+              plt.figure(figsize=(10, 5))
+              plt.text(0.5, 0.5, 'Collecting Data...', ha='center', color='white')
+              plt.axis('off')
+              plt.savefig("traffic-graph.svg", transparent=True)
               exit(0)
 
           # Read CSV
-          df = pd.read_csv("traffic/views.csv", parse_dates=['_date'])
-          df = df.sort_values('_date')
+          try:
+              df = pd.read_csv(csv_path, parse_dates=['_date'])
+              df = df.sort_values('_date')
+          except Exception as e:
+              print(f"Error reading CSV: {e}")
+              exit(0)
 
-          # Plot
+          # Plot setup
           plt.figure(figsize=(10, 5))
-          plt.plot(df['_date'], df['count'], marker='o', linestyle='-', color='#79ff97', label='Total Views')
-          plt.plot(df['_date'], df['uniques'], marker='o', linestyle='--', color='#2f80ed', label='Unique Visitors')
           
-          # Style (Dark Mode for GitHub)
+          # Plot Total Views
+          plt.plot(df['_date'], df['count'], marker='o', linestyle='-', color='#79ff97', linewidth=2, label='Total Views')
+          
+          # Plot Unique Visitors
+          plt.plot(df['_date'], df['uniques'], marker='o', linestyle='--', color='#2f80ed', linewidth=2, label='Unique Visitors')
+          
+          # Styling (Dark Theme)
           plt.style.use('dark_background')
-          plt.title('Repository Traffic History (All Time)', color='white')
-          plt.xlabel('Date', color='white')
-          plt.ylabel('Views', color='white')
-          plt.grid(True, linestyle=':', alpha=0.3)
-          plt.legend()
+          
+          # Remove frame
+          plt.gca().spines['top'].set_visible(False)
+          plt.gca().spines['right'].set_visible(False)
+          plt.gca().spines['bottom'].set_color('#30363d')
+          plt.gca().spines['left'].set_color('#30363d')
+          
+          plt.title('Repository Views History', color='white', fontweight='bold', pad=20)
+          plt.xlabel('Date', color='#8b949e')
+          plt.ylabel('Count', color='#8b949e')
+          plt.tick_params(colors='#8b949e')
+          plt.grid(True, linestyle=':', alpha=0.2, color='white')
+          plt.legend(frameon=False, labelcolor='white')
           plt.tight_layout()
 
           # Save
           plt.savefig("traffic-graph.svg", transparent=True)
-          print("Graph generated: traffic-graph.svg")
+          print("Graph generated successfully: traffic-graph.svg")
           EOF
           
           python plot_traffic.py
 
-      # C. Commit the new graph
-      - name: Commit Graph
+      # C. Commit both the CSV history AND the new graph
+      - name: Commit Changes
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          commit_message: "Update traffic graph"
-          file_pattern: "traffic-graph.svg"
+          commit_message: "Update traffic history and graph"
+          # IMPORTANT: We commit the traffic folder (CSV) AND the SVG
+          file_pattern: "traffic/ traffic-graph.svg"
 
-  # 2. Generate Standard Metrics (Your existing setup)
+  # 2. Generate Standard Metrics
   github-metrics:
     needs: traffic-history
     runs-on: ubuntu-latest
@@ -92,7 +119,7 @@ jobs:
           config_display: large
           theme: tokyonight 
           
-          # Plugins
+          plugin_traffic: yes
           plugin_followup: yes
           plugin_followup_sections: repositories
           plugin_languages: yes
