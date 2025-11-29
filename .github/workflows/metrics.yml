@@ -19,7 +19,7 @@ jobs:
       - name: Repository Traffic Collector
         uses: sangonzal/repository-traffic-action@v0.1.6
         env:
-          TRAFFIC_ACTION_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          TRAFFIC_ACTION_TOKEN: ${{ secrets.METRICS_PROFILE }}
 
       # B. Generate Graph from CSV (Python)
       - name: Setup Python
