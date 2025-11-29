@@ -19,7 +19,8 @@ jobs:
       - name: Repository Traffic Collector
         uses: sangonzal/repository-traffic-action@master
         env:
-          TRAFFIC_ACTION_TOKEN: ${{ secrets.METRICS_PROFILE}}
+          # Using the secret name you confirmed
+          TRAFFIC_ACTION_TOKEN: ${{ secrets.METRICS_PROFILE }}
 
       # B. Generate Graph from CSV (Python)
       - name: Setup Python
@@ -127,14 +128,18 @@ jobs:
     steps:
       - uses: lowlighter/metrics@latest
         with:
-          token: ${{ secrets.METRICS_TOKEN }}
+          # FIXED: Using your secret name
+          token: ${{ secrets.METRICS_PROFILE }}
+          
+          # Options
           user: Mehran-Ai
           template: classic
           config_timezone: Asia/Tehran
           base: header, activity, repositories
           config_display: large
-          theme: tokyonight 
+          # REMOVED: "theme" input (invalid). We will stick to default dark mode or use extras_css if needed.
           
+          # Plugins
           plugin_traffic: yes
           plugin_followup: yes
           plugin_followup_sections: repositories
