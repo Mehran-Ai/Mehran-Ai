@@ -13,11 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # Retrieve full history
+          fetch-depth: 0 
 
       # A. Collect Traffic Data to CSV
       - name: Repository Traffic Collector
-        # CHANGED: Switched to @master to fix the version error
         uses: sangonzal/repository-traffic-action@master
         env:
           TRAFFIC_ACTION_TOKEN: ${{ secrets.METRICS_PROFILE }}
@@ -39,41 +38,59 @@ jobs:
           import matplotlib.pyplot as plt
           import os
 
-          # Define the path to the traffic views file
-          # The action saves it in the 'traffic' folder
+          # Define path
           csv_path = "traffic/views.csv"
 
-          # Check if file exists (it might not on the very first run)
+          # 1. Check if file exists
           if not os.path.exists(csv_path):
-              print(f"File {csv_path} not found. Skipping graph generation for now.")
-              # Create a placeholder empty image to prevent errors
+              print(f"File {csv_path} not found. Skipping graph generation.")
+              # Generate placeholder
               plt.figure(figsize=(10, 5))
-              plt.text(0.5, 0.5, 'Collecting Data...', ha='center', color='white')
+              plt.text(0.5, 0.5, 'Waiting for data...', ha='center', color='white')
               plt.axis('off')
               plt.savefig("traffic-graph.svg", transparent=True)
               exit(0)
 
-          # Read CSV
+          # 2. Read CSV & Detect Columns
           try:
-              df = pd.read_csv(csv_path, parse_dates=['_date'])
-              df = df.sort_values('_date')
+              df = pd.read_csv(csv_path)
+              
+              # Normalize column names (lowercase, strip whitespace)
+              df.columns = [c.lower().strip() for c in df.columns]
+              print(f"Found columns: {df.columns.tolist()}")
+
+              # Smart column detection
+              date_col = df.columns[0] # Assume first col is date
+              
+              # Find 'count' or 'views' column
+              count_col = next((c for c in df.columns if 'count' in c or 'view' in c), None)
+              
+              # Find 'unique' column
+              unique_col = next((c for c in df.columns if 'unique' in c), None)
+
+              if not count_col or not unique_col:
+                  print("Error: Could not identify count or unique columns.")
+                  exit(0)
+
+              # Convert date
+              df[date_col] = pd.to_datetime(df[date_col])
+              df = df.sort_values(date_col)
+
           except Exception as e:
-              print(f"Error reading CSV: {e}")
+              print(f"Error processing CSV: {e}")
               exit(0)
 
-          # Plot setup
+          # 3. Plotting
           plt.figure(figsize=(10, 5))
           
           # Plot Total Views
-          plt.plot(df['_date'], df['count'], marker='o', linestyle='-', color='#79ff97', linewidth=2, label='Total Views')
+          plt.plot(df[date_col], df[count_col], marker='o', linestyle='-', color='#79ff97', linewidth=2, label='Total Views')
           
           # Plot Unique Visitors
-          plt.plot(df['_date'], df['uniques'], marker='o', linestyle='--', color='#2f80ed', linewidth=2, label='Unique Visitors')
+          plt.plot(df[date_col], df[unique_col], marker='o', linestyle='--', color='#2f80ed', linewidth=2, label='Unique Visitors')
           
-          # Styling (Dark Theme)
+          # Style
           plt.style.use('dark_background')
-          
-          # Remove frame
           plt.gca().spines['top'].set_visible(False)
           plt.gca().spines['right'].set_visible(False)
           plt.gca().spines['bottom'].set_color('#30363d')
@@ -81,7 +98,7 @@ jobs:
           
           plt.title('Repository Views History', color='white', fontweight='bold', pad=20)
           plt.xlabel('Date', color='#8b949e')
-          plt.ylabel('Count', color='#8b949e')
+          plt.ylabel('Views', color='#8b949e')
           plt.tick_params(colors='#8b949e')
           plt.grid(True, linestyle=':', alpha=0.2, color='white')
           plt.legend(frameon=False, labelcolor='white')
@@ -94,12 +111,11 @@ jobs:
           
           python plot_traffic.py
 
-      # C. Commit both the CSV history AND the new graph
+      # C. Commit changes
       - name: Commit Changes
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
           commit_message: "Update traffic history and graph"
-          # IMPORTANT: We commit the traffic folder (CSV) AND the SVG
           file_pattern: "traffic/ traffic-graph.svg"
 
   # 2. Generate Standard Metrics
