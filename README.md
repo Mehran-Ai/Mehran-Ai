@@ -27,12 +27,7 @@
 * <img src="https://img.shields.io/badge/jsonwebtokens-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white" alt="JWT" /> <img src="https://img.shields.io/badge/oauth2-2496ED?style=for-the-badge&logo=oauth&logoColor=white" alt="OAuth2" /> 
 
 #### ⚙️ DevOps & Infrastructure
-* <img src="https://img.shields.io/badge/linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux" /> <img src="https://img.shields.io/badge/docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" /> <img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose" /> <img src="https://img.shields.io/badge/kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white" alt="Kubernetes" />
-
-<p align="center">
-  <img src="https://github-readme-stats.vercel.app/api?username=Mehran-Ai&show_icons=true&theme=tokyonight&icon_color=79ff97&hide_border=true&cache_seconds=86400" alt="Mehran's GitHub Stats" />
-  <img src="https://github-readme-stats.vercel.app/api/top-langs/?username=Mehran-Ai&layout=compact&theme=tokyonight&hide_border=true&cache_seconds=86400" alt="Top Languages" />
-</p>
+* <img src="https://img.shields.io/badge/linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux" /> <img src="https://img.shields.io/badge/docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" /> <img src="https://img.shields.io/badge/docker%20compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose" />
 
 <p align="right">
   <img src="https://komarev.com/ghpvc/?username=Mehran-Ai&color=blueviolet&style=flat-square" alt="Profile Views" />
