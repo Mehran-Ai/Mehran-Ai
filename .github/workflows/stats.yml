@@ -1,0 +1,295 @@
+name: Metrics & Separate SVGs
+
+on:
+  schedule: [{cron: "0 */4 * * *"}]
+  workflow_dispatch:
+  push: {branches: ["main"]}
+
+jobs:
+  # ========================================================================
+  # JOB 1: CUSTOM TRAFFIC HISTORY (Saves CSV & Graph)
+  # ========================================================================
+  traffic-history:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: pip install pandas matplotlib requests
+
+      # A. AGGREGATE TRAFFIC
+      - name: Collect & Aggregate Traffic
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.METRICS_PROFILE }}
+          USERNAME: Mehran-Ai
+        run: |
+          cat << 'EOF' > collect_traffic.py
+          import requests
+          import pandas as pd
+          import time
+          import os
+
+          TOKEN = os.environ["TRAFFIC_TOKEN"]
+          USERNAME = os.environ["USERNAME"]
+          HEADERS = {"Authorization": f"token {TOKEN}", "Accept": "application/vnd.github.v3+json"}
+
+          # Fetch repos
+          print(f"Fetching list of repositories for {USERNAME}...")
+          repos = []
+          page = 1
+          while True:
+              url = f"https://api.github.com/user/repos?type=owner&per_page=100&page={page}"
+              r = requests.get(url, headers=HEADERS)
+              if r.status_code != 200 or not r.json(): break
+              repos.extend([repo['name'] for repo in r.json()])
+              page += 1
+          
+          # Collect data
+          daily_views = {}
+          daily_clones = {}
+          print(f"Collecting traffic for {len(repos)} repos...")
+
+          for repo in repos:
+              try:
+                  v = requests.get(f"https://api.github.com/repos/{USERNAME}/{repo}/traffic/views", headers=HEADERS).json()
+                  if 'views' in v:
+                      for item in v['views']:
+                          date = item['timestamp'][:10]
+                          daily_views.setdefault(date, {'count': 0, 'uniques': 0})
+                          daily_views[date]['count'] += item['count']
+                          daily_views[date]['uniques'] += item['uniques']
+
+                  c = requests.get(f"https://api.github.com/repos/{USERNAME}/{repo}/traffic/clones", headers=HEADERS).json()
+                  if 'clones' in c:
+                      for item in c['clones']:
+                          date = item['timestamp'][:10]
+                          daily_clones.setdefault(date, {'count': 0, 'uniques': 0})
+                          daily_clones[date]['count'] += item['count']
+                          daily_clones[date]['uniques'] += item['uniques']
+                  time.sleep(0.5)
+              except Exception: pass
+
+          # Save CSVs
+          os.makedirs("traffic", exist_ok=True)
+          def update_csv(filename, new_data):
+              path = f"traffic/{filename}"
+              df = pd.read_csv(path) if os.path.exists(path) else pd.DataFrame(columns=["_date", "count", "uniques"])
+              
+              for date, stats in new_data.items():
+                  mask = df['_date'] == date
+                  if mask.any():
+                      df.loc[mask, 'count'] = stats['count']
+                      df.loc[mask, 'uniques'] = stats['uniques']
+                  else:
+                      new_row = pd.DataFrame([{"_date": date, "count": stats['count'], "uniques": stats['uniques']}])
+                      df = pd.concat([df, new_row], ignore_index=True)
+              
+              df.sort_values('_date').to_csv(path, index=False)
+
+          update_csv("views.csv", daily_views)
+          update_csv("clones.csv", daily_clones)
+          EOF
+          python collect_traffic.py
+
+      # B. GENERATE GRAPH
+      - name: Generate Traffic Graph
+        run: |
+          cat << 'EOF' > plot_traffic.py
+          import pandas as pd
+          import matplotlib.pyplot as plt
+          import matplotlib.dates as mdates
+          import os
+
+          # Theme Colors
+          BG_COLOR = '#1a1b26' 
+          TEXT_COLOR = '#a9b1d6'
+          GRID_COLOR = '#414868'
+          
+          plt.style.use('dark_background')
+          fig = plt.figure(figsize=(10, 8))
+          fig.patch.set_facecolor(BG_COLOR)
+
+          def plot_data(ax, csv_path, title, color_total, color_unique):
+              ax.set_facecolor(BG_COLOR)
+              if not os.path.exists(csv_path) or os.stat(csv_path).st_size == 0:
+                  ax.text(0.5, 0.5, "Collecting Data...", ha='center', color=TEXT_COLOR)
+                  ax.axis('off')
+                  return
+              try:
+                  df = pd.read_csv(csv_path)
+                  df.columns = [c.lower().strip() for c in df.columns]
+                  if df.empty: return
+                  date_col = df.columns[0]
+                  count_col = next((c for c in df.columns if 'count' in c or 'view' in c), None)
+                  unique_col = next((c for c in df.columns if 'unique' in c), None)
+                  
+                  df[date_col] = pd.to_datetime(df[date_col])
+                  df = df.sort_values(date_col)
+
+                  ax.plot(df[date_col], df[count_col], marker='o', linestyle='-', color=color_total, label='Total')
+                  ax.plot(df[date_col], df[unique_col], marker='o', linestyle='--', color=color_unique, label='Unique')
+                  
+                  ax.set_title(title, color=TEXT_COLOR, fontweight='bold', loc='left')
+                  ax.grid(True, linestyle=':', alpha=0.4, color=GRID_COLOR)
+                  ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+                  ax.spines['bottom'].set_color(GRID_COLOR); ax.spines['left'].set_color(GRID_COLOR)
+                  ax.tick_params(colors=TEXT_COLOR)
+                  ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+                  legend = ax.legend(frameon=False, loc='upper left', bbox_to_anchor=(1, 1))
+                  plt.setp(legend.get_texts(), color=TEXT_COLOR)
+              except Exception: pass
+
+          ax1 = plt.subplot(2, 1, 1)
+          plot_data(ax1, "traffic/views.csv", "Total Views", "#7aa2f7", "#bb9af7") 
+          ax2 = plt.subplot(2, 1, 2)
+          plot_data(ax2, "traffic/clones.csv", "Total Clones", "#f7768e", "#e0af68") 
+
+          plt.tight_layout()
+          plt.savefig("traffic-graph.svg", facecolor=fig.get_facecolor(), edgecolor='none', bbox_inches="tight")
+          EOF
+          python plot_traffic.py
+
+      - name: Commit Traffic Files
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Update traffic history"
+          file_pattern: "traffic/ traffic-graph.svg"
+
+  # ========================================================================
+  # JOB 2: MULTI-SVG METRICS GENERATION
+  # ========================================================================
+  generate-metrics:
+    needs: traffic-history
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+
+      # 1. HEADER (Join date, Bio)
+      - name: Header
+        uses: lowlighter/metrics@latest
+        with:
+          filename: metrics-header.svg
+          token: ${{ secrets.METRICS_PROFILE }}
+          user: Mehran-Ai
+          base: header
+          template: classic
+          config_timezone: Asia/Tehran
+          config_display: large
+
+      # 2. ACTIVITY (Commit counts)
+      - name: Activity
+        uses: lowlighter/metrics@latest
+        with:
+          filename: metrics-activity.svg
+          token: ${{ secrets.METRICS_PROFILE }}
+          user: Mehran-Ai
+          base: activity
+          config_timezone: Asia/Tehran
+
+      # 3. REPOSITORIES (Stars, License info)
+      - name: Repositories
+        uses: lowlighter/metrics@latest
+        with:
+          filename: metrics-repositories.svg
+          token: ${{ secrets.METRICS_PROFILE }}
+          user: Mehran-Ai
+          base: repositories
+          config_timezone: Asia/Tehran
+
+      # 4. RADAR CHART (Introduction Plugin)
+      - name: Radar Chart
+        uses: lowlighter/metrics@latest
+        with:
+          filename: metrics-radar.svg
+          token: ${{ secrets.METRICS_PROFILE }}
+          user: Mehran-Ai
+          base: ""
+          plugin_introduction: yes
+          plugin_introduction_title: yes
+          config_timezone: Asia/Tehran
+
+      # 5. HABITS (Coding times) - Optimized
+      - name: Habits
+        uses: lowlighter/metrics@latest
+        with:
+          filename: metrics-habits.svg
+          token: ${{ secrets.METRICS_PROFILE }}
+          user: Mehran-Ai
+          base: ""
+          plugin_habits: yes
+          plugin_habits_from: 200
+          plugin_habits_days: 14
+          plugin_habits_facts: no
+          plugin_habits_charts: yes
+          plugin_habits_trim: yes
+          config_timezone: Asia/Tehran
+
+      # 6. LANGUAGES (Bar chart)
+      - name: Languages
+        uses: lowlighter/metrics@latest
+        with:
+          filename: metrics-languages.svg
+          token: ${{ secrets.METRICS_PROFILE }}
+          user: Mehran-Ai
+          base: ""
+          plugin_languages: yes
+          plugin_languages_ignored: html, css, tex, less, dockerfile, makefile, qmake, lex, cmake, shell, gnuplot
+          plugin_languages_limit: 8
+          plugin_languages_details: lines, percentage
+          config_timezone: Asia/Tehran
+
+      # 7. LINES OF CODE
+      - name: Lines of Code
+        uses: lowlighter/metrics@latest
+        with:
+          filename: metrics-lines.svg
+          token: ${{ secrets.METRICS_PROFILE }}
+          user: Mehran-Ai
+          base: ""
+          plugin_lines: yes
+          plugin_lines_history_limit: 1
+          plugin_lines_repositories_limit: 4
+          plugin_lines_sections: base
+          config_timezone: Asia/Tehran
+
+      # 8. FOLLOWUP (Detailed breakdown)
+      - name: Followup
+        uses: lowlighter/metrics@latest
+        with:
+          filename: metrics-followup.svg
+          token: ${{ secrets.METRICS_PROFILE }}
+          user: Mehran-Ai
+          base: ""
+          plugin_followup: yes
+          plugin_followup_sections: repositories
+          plugin_followup_indepth: yes
+          config_timezone: Asia/Tehran
+
+      # 9. TRAFFIC (API 14-day view)
+      - name: Traffic (API)
+        uses: lowlighter/metrics@latest
+        with:
+          filename: metrics-traffic.svg
+          token: ${{ secrets.METRICS_PROFILE }}
+          user: Mehran-Ai
+          base: ""
+          plugin_traffic: yes
+          config_timezone: Asia/Tehran
+
+      # FINAL STEP: Commit all the new SVGs
+      - name: Commit All Metric SVGs
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Update all metric cards"
+          file_pattern: "*.svg"
